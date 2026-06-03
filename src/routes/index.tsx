@@ -63,7 +63,7 @@ function Index() {
             onOpenPalette={() => setPaletteOpen(true)}
             onSettings={() => setSection("settings")}
           />
-          <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <div className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-7xl">
               <AnimatePresence mode="wait">
                 <motion.div
@@ -90,7 +90,7 @@ function Index() {
                 </motion.div>
               </AnimatePresence>
             </div>
-          </main>
+          </div>
         </SidebarInset>
       </div>
       <CommandPalette
