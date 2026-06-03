@@ -2,6 +2,8 @@ import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { Activity as ActivityIcon, Bot, CheckCircle2, Zap } from "lucide-react";
 import type { Activity, Agent, Task } from "./data";
+import { Sparkline } from "./Sparkline";
+import { sparkSeries, systemPulse } from "./mockExtras";
 
 function useCountUp(target: number, duration = 900) {
   const [v, setV] = useState(0);
@@ -25,12 +27,16 @@ function MetricCard({
   value,
   trend,
   delay,
+  series,
+  color,
 }: {
   icon: typeof Bot;
   label: string;
   value: number;
   trend: string;
   delay: number;
+  series: { x: number; y: number }[];
+  color: string;
 }) {
   const v = useCountUp(value);
   return (
@@ -39,7 +45,7 @@ function MetricCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay }}
       whileHover={{ y: -2 }}
-      className="glass-card group relative overflow-hidden p-5 transition-shadow hover:shadow-[0_0_40px_-8px_rgba(16,185,129,0.25)]"
+      className="glass-card-elevated glow-hover shimmer group relative overflow-hidden p-5"
     >
       <div className="flex items-start justify-between">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400 glow-emerald">
@@ -49,6 +55,9 @@ function MetricCard({
       </div>
       <div className="mt-4 font-mono text-3xl font-semibold text-foreground tabular-nums">{v}</div>
       <div className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="-mx-2 -mb-2 mt-3 opacity-80">
+        <Sparkline data={series} color={color} height={36} />
+      </div>
     </motion.div>
   );
 }
@@ -77,11 +86,42 @@ export function CommandDeck({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard icon={Bot} label="Active Agents" value={active} trend="+1 today" delay={0} />
-        <MetricCard icon={ActivityIcon} label="Open Tasks" value={open} trend="-2 vs yesterday" delay={0.05} />
-        <MetricCard icon={CheckCircle2} label="Completed Today" value={done} trend="+3 today" delay={0.1} />
-        <MetricCard icon={Zap} label="Throughput / hr" value={47} trend="+12%" delay={0.15} />
+        <MetricCard icon={Bot} label="Active Agents" value={active} trend="+1 today" delay={0} series={sparkSeries(2)} color="#10b981" />
+        <MetricCard icon={ActivityIcon} label="Open Tasks" value={open} trend="-2 vs yesterday" delay={0.05} series={sparkSeries(5)} color="#06b6d4" />
+        <MetricCard icon={CheckCircle2} label="Completed Today" value={done} trend="+3 today" delay={0.1} series={sparkSeries(9)} color="#a78bfa" />
+        <MetricCard icon={Zap} label="Throughput / hr" value={47} trend="+12%" delay={0.15} series={sparkSeries(13)} color="#fbbf24" />
       </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+        className="glass-card-elevated p-5"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-display text-base font-semibold">System pulse</h2>
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            real-time
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          {systemPulse.map((p) => (
+            <div key={p.key} className="rounded-lg border border-white/5 bg-black/20 p-3">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {p.label}
+                </span>
+                <span className="font-mono text-sm font-semibold" style={{ color: p.color }}>
+                  {p.value}
+                </span>
+              </div>
+              <div className="mt-2">
+                <Sparkline data={p.series} color={p.color} height={32} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <motion.div
