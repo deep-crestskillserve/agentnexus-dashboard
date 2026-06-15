@@ -78,9 +78,7 @@ function Index() {
                     <CommandDeck agents={agents} tasks={tasks} activity={activity} />
                   )}
                   {section === "agents" && <AgentProfiles agents={agents} />}
-                  {section === "tasks" && (
-                    <TaskBoard tasks={tasks} agents={agents} onMove={moveTask} />
-                  )}
+                  {section === "tasks" && <TaskBoard />}
                   {section === "log" && <AILog logs={logs} agents={agents} />}
                   {section === "council" && <Council sessions={councils} agents={agents} />}
                   {section === "meetings" && <MeetingIntelligence meetings={meetings} />}
