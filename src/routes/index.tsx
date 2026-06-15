@@ -10,6 +10,11 @@ import { MeetingIntelligence } from "@/components/clawbuddy/MeetingIntelligence"
 import { Integrations } from "@/components/clawbuddy/Integrations";
 import { Billing } from "@/components/clawbuddy/Billing";
 import { Settings as SettingsPage } from "@/components/clawbuddy/Settings";
+import { LiveDashboard } from "@/components/clawbuddy/LiveDashboard";
+import { LiveAgents } from "@/components/clawbuddy/LiveAgents";
+import { LiveWorkflows } from "@/components/clawbuddy/LiveWorkflows";
+import { LiveLogsViewer } from "@/components/clawbuddy/LiveLogsViewer";
+import { LiveEventBus } from "@/components/clawbuddy/LiveEventBus";
 import { AppSidebar, type SectionId } from "@/components/clawbuddy/AppSidebar";
 import { Topbar } from "@/components/clawbuddy/Topbar";
 import { CommandPalette } from "@/components/clawbuddy/CommandPalette";
@@ -85,6 +90,11 @@ function Index() {
                   {section === "integrations" && <Integrations />}
                   {section === "billing" && <Billing />}
                   {section === "settings" && <SettingsPage />}
+                  {section === "live-dashboard" && <LiveDashboard />}
+                  {section === "live-agents" && <LiveAgents />}
+                  {section === "live-workflows" && <LiveWorkflows />}
+                  {section === "live-logs" && <LiveLogsViewer />}
+                  {section === "live-events" && <LiveEventBus />}
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -112,6 +122,11 @@ const titles: Record<SectionId, { title: string; sub: string }> = {
   integrations: { title: "Integrations", sub: "Plug ClawBuddy into your stack." },
   billing: { title: "Billing", sub: "Plan, usage, and invoice history." },
   settings: { title: "Settings", sub: "Workspace, profile, and preferences." },
+  "live-dashboard": { title: "Live Dashboard", sub: "Real-time OpenClaw metrics from Supabase." },
+  "live-agents": { title: "Live Agents", sub: "All registered OpenClaw agents — live status." },
+  "live-workflows": { title: "Workflow Monitor", sub: "Live workflow execution history and durations." },
+  "live-logs": { title: "Log Viewer", sub: "Real-time streaming logs from every agent." },
+  "live-events": { title: "Event Bus", sub: "Live event stream from all OpenClaw sources." },
 };
 
 function SectionTitle({ section }: { section: SectionId }) {

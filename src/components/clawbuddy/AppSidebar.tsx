@@ -11,6 +11,9 @@ import {
   Settings,
   ChevronsUpDown,
   Check,
+  GitBranch,
+  Radio,
+  Activity,
 } from "lucide-react";
 import {
   Sidebar,
@@ -45,7 +48,13 @@ export type SectionId =
   | "log"
   | "integrations"
   | "billing"
-  | "settings";
+  | "settings"
+  // Live OpenClaw sections
+  | "live-dashboard"
+  | "live-agents"
+  | "live-workflows"
+  | "live-logs"
+  | "live-events";
 
 const workspace = [
   { id: "deck" as const, label: "Command Deck", icon: LayoutDashboard },
@@ -54,6 +63,14 @@ const workspace = [
   { id: "meetings" as const, label: "Meetings", icon: Calendar },
   { id: "council" as const, label: "Council", icon: Users2 },
   { id: "log" as const, label: "AI Log", icon: ScrollText },
+];
+
+const openclaw = [
+  { id: "live-dashboard" as const, label: "Live Dashboard", icon: Activity },
+  { id: "live-agents" as const, label: "Live Agents", icon: Bot },
+  { id: "live-workflows" as const, label: "Workflows", icon: GitBranch },
+  { id: "live-logs" as const, label: "Log Viewer", icon: ScrollText },
+  { id: "live-events" as const, label: "Event Bus", icon: Radio },
 ];
 
 const system = [
@@ -118,8 +135,24 @@ export function AppSidebar({
 
         <SidebarGroup>
           <SidebarGroupLabel className="font-mono text-[10px] uppercase tracking-widest">
-            System
+            OpenClaw Live
           </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {openclaw.map((item) => (
+                <NavItem
+                  key={item.id}
+                  item={item}
+                  active={section === item.id}
+                  collapsed={collapsed}
+                  onSelect={() => onSelect(item.id)}
+                />
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
               {system.map((item) => (

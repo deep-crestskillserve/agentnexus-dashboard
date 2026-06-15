@@ -15,6 +15,11 @@ const sectionLabels: Record<SectionId, string> = {
   integrations: "Integrations",
   billing: "Billing",
   settings: "Settings",
+  "live-dashboard": "Live Dashboard",
+  "live-agents": "Live Agents",
+  "live-workflows": "Workflow Monitor",
+  "live-logs": "Log Viewer",
+  "live-events": "Event Bus",
 };
 
 export function Topbar({
