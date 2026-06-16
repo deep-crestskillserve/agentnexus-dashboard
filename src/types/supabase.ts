@@ -16,7 +16,7 @@ export interface Agent {
 
 export interface Task {
   id: string;
-  agent_id: string | null;
+  assignee_id: string | null;
   title: string;
   description: string | null;
   status: TaskStatus;

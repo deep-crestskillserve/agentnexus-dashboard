@@ -32,4 +32,5 @@ dist-ssr
 *.sw?
 
 *.env
-*env.example
+*env.examplekeys.txt
+keys.txt.pub

@@ -13,7 +13,7 @@ export function useTasks(agentId?: string) {
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (agentId) query = query.eq("agent_id", agentId);
+    if (agentId) query = query.eq("assignee_id", agentId);
 
     query.then(({ data, error }) => {
       if (error) setError(error.message);
@@ -29,7 +29,7 @@ export function useTasks(agentId?: string) {
           event: "*",
           schema: "public",
           table: "tasks",
-          ...(agentId ? { filter: `agent_id=eq.${agentId}` } : {}),
+          ...(agentId ? { filter: `assignee_id=eq.${agentId}` } : {}),
         },
         (payload) => {
           if (payload.eventType === "INSERT") {
