@@ -69,6 +69,18 @@ export interface Metric {
   created_at: string;
 }
 
+export interface User {
+  id: string;
+  name: string;
+  role: string | null;
+  display_name: string | null;
+  email: string | null;
+  phone: string | null;
+  providers: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type EventType =
   | "task_created"
   | "task_started"

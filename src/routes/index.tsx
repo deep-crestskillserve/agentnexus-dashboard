@@ -15,6 +15,7 @@ import { LiveAgents } from "@/components/clawbuddy/LiveAgents";
 import { LiveWorkflows } from "@/components/clawbuddy/LiveWorkflows";
 import { LiveLogsViewer } from "@/components/clawbuddy/LiveLogsViewer";
 import { LiveEventBus } from "@/components/clawbuddy/LiveEventBus";
+import { IntegrationGuide } from "./integration-guide";
 import { AppSidebar, type SectionId } from "@/components/clawbuddy/AppSidebar";
 import { Topbar } from "@/components/clawbuddy/Topbar";
 import { CommandPalette } from "@/components/clawbuddy/CommandPalette";
@@ -95,6 +96,7 @@ function Index() {
                   {section === "live-workflows" && <LiveWorkflows />}
                   {section === "live-logs" && <LiveLogsViewer />}
                   {section === "live-events" && <LiveEventBus />}
+                  {section === "integration-guide" && <IntegrationGuide />}
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -127,6 +129,7 @@ const titles: Record<SectionId, { title: string; sub: string }> = {
   "live-workflows": { title: "Workflow Monitor", sub: "Live workflow execution history and durations." },
   "live-logs": { title: "Log Viewer", sub: "Real-time streaming logs from every agent." },
   "live-events": { title: "Event Bus", sub: "Live event stream from all OpenClaw sources." },
+  "integration-guide": { title: "Integration Guide", sub: "Learn how to integrate AI agents with the platform" },
 };
 
 function SectionTitle({ section }: { section: SectionId }) {

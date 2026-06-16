@@ -9,8 +9,14 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as IntegrationGuideRouteImport } from './routes/integration-guide'
 import { Route as IndexRouteImport } from './routes/index'
 
+const IntegrationGuideRoute = IntegrationGuideRouteImport.update({
+  id: '/integration-guide',
+  path: '/integration-guide',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +25,39 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/integration-guide': typeof IntegrationGuideRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/integration-guide': typeof IntegrationGuideRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/integration-guide': typeof IntegrationGuideRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/integration-guide'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/integration-guide'
+  id: '__root__' | '/' | '/integration-guide'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  IntegrationGuideRoute: typeof IntegrationGuideRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/integration-guide': {
+      id: '/integration-guide'
+      path: '/integration-guide'
+      fullPath: '/integration-guide'
+      preLoaderRoute: typeof IntegrationGuideRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +70,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  IntegrationGuideRoute: IntegrationGuideRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

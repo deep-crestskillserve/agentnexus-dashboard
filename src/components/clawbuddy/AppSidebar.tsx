@@ -14,6 +14,7 @@ import {
   GitBranch,
   Radio,
   Activity,
+  BookOpen,
 } from "lucide-react";
 import {
   Sidebar,
@@ -54,7 +55,8 @@ export type SectionId =
   | "live-agents"
   | "live-workflows"
   | "live-logs"
-  | "live-events";
+  | "live-events"
+  | "integration-guide";
 
 const workspace = [
   { id: "deck" as const, label: "Command Deck", icon: LayoutDashboard },
@@ -77,6 +79,7 @@ const system = [
   { id: "integrations" as const, label: "Integrations", icon: Plug },
   { id: "billing" as const, label: "Billing", icon: CreditCard },
   { id: "settings" as const, label: "Settings", icon: Settings },
+  { id: "integration-guide" as const, label: "Integration Guide", icon: BookOpen },
 ];
 
 export function AppSidebar({
