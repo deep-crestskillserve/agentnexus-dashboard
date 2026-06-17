@@ -21,15 +21,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { initialAgents } from "@/components/clawbuddy/data";
 
-// ───────────────── Types (Supabase-shaped mock) ─────────────────
+// ───────────────── Types ─────────────────
 type ColumnId = "todo" | "doing" | "needs_input" | "done" | "canceled";
 type Priority = "urgent" | "high" | "medium" | "low";
 
 interface BoardColumn {
   id: ColumnId;
   name: string;
-  color: string; // hex
+  color: string;
   position: number;
 }
 
@@ -50,7 +51,7 @@ interface BoardTask {
   description: string;
   board_column_id: ColumnId;
   priority: Priority;
-  due_date: string | null; // ISO date
+  due_date: string | null;
   position: number;
   created_at: string;
   subtasks: Subtask[];
@@ -84,6 +85,21 @@ const AVATAR_COLORS = [
   "bg-teal-500",
 ];
 
+// Build the available agents list from data.ts (agents + humans from meetings)
+const AVAILABLE_AGENTS: Assignee[] = [
+  ...initialAgents.map((a) => ({ id: a.id, display_name: `${a.emoji} ${a.name}` })),
+  // Human users extracted from data
+  { id: "alice", display_name: "👤 Alice Chen" },
+  { id: "bob", display_name: "👤 Bob Reyes" },
+  { id: "charlie", display_name: "👤 Charlie Park" },
+  { id: "dana", display_name: "👤 Dana Kim" },
+  { id: "eli", display_name: "👤 Eli Singh" },
+  { id: "faye", display_name: "👤 Faye Ortiz" },
+  { id: "sasha", display_name: "👤 Sasha Wu" },
+  { id: "priya", display_name: "👤 Priya Shah" },
+  { id: "morgan", display_name: "👤 Morgan Lee" },
+];
+
 function colorFor(seed: string) {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
@@ -91,7 +107,9 @@ function colorFor(seed: string) {
 }
 
 function initials(name: string) {
-  return name
+  // Strip emojis for initials
+  const clean = name.replace(/\p{Emoji}/gu, "").trim();
+  return clean
     .split(/\s+/)
     .map((s) => s[0])
     .filter(Boolean)
@@ -141,8 +159,8 @@ const SEED: BoardTask[] = [
       { id: "s4", title: "Backfill tests", completed: false },
     ],
     assignees: [
-      { id: "u1", display_name: "Alice Chen" },
-      { id: "u2", display_name: "Bob Reyes" },
+      { id: "alice", display_name: "👤 Alice Chen" },
+      { id: "alpha", display_name: "🤖 Agent Alpha" },
     ],
   },
   {
@@ -158,7 +176,7 @@ const SEED: BoardTask[] = [
       { id: "s5", title: "Write migration script", completed: false },
       { id: "s6", title: "Rollback rehearsal", completed: false },
     ],
-    assignees: [{ id: "u1", display_name: "Alice Chen" }],
+    assignees: [{ id: "alice", display_name: "👤 Alice Chen" }],
   },
   {
     id: "t3",
@@ -171,10 +189,8 @@ const SEED: BoardTask[] = [
     created_at: new Date().toISOString(),
     subtasks: [],
     assignees: [
-      { id: "u3", display_name: "Charlie Park" },
-      { id: "u4", display_name: "Dana Kim" },
-      { id: "u5", display_name: "Eli Singh" },
-      { id: "u6", display_name: "Faye Ortiz" },
+      { id: "dispatch", display_name: "📋 Dispatch Bot" },
+      { id: "charlie", display_name: "👤 Charlie Park" },
     ],
   },
   {
@@ -190,7 +206,7 @@ const SEED: BoardTask[] = [
       { id: "s7", title: "Receive SOC2 docs", completed: false },
       { id: "s8", title: "File with compliance", completed: false },
     ],
-    assignees: [{ id: "u2", display_name: "Bob Reyes" }],
+    assignees: [{ id: "audit", display_name: "🛡️ Audit Bot" }],
   },
   {
     id: "t5",
@@ -202,7 +218,7 @@ const SEED: BoardTask[] = [
     position: 1,
     created_at: new Date().toISOString(),
     subtasks: [],
-    assignees: [{ id: "u1", display_name: "Alice Chen" }],
+    assignees: [{ id: "alpha", display_name: "🤖 Agent Alpha" }],
   },
   {
     id: "t6",
@@ -217,7 +233,7 @@ const SEED: BoardTask[] = [
       { id: "s9", title: "Ship hotfix", completed: true },
       { id: "s10", title: "Write postmortem", completed: true },
     ],
-    assignees: [{ id: "u3", display_name: "Charlie Park" }],
+    assignees: [{ id: "charlie", display_name: "👤 Charlie Park" }],
   },
   {
     id: "t7",
@@ -229,7 +245,7 @@ const SEED: BoardTask[] = [
     position: 1,
     created_at: new Date().toISOString(),
     subtasks: [],
-    assignees: [{ id: "u4", display_name: "Dana Kim" }],
+    assignees: [{ id: "audit", display_name: "🛡️ Audit Bot" }],
   },
   {
     id: "t8",
@@ -569,7 +585,7 @@ function TaskDetailDialog({
   onDelete: () => void;
 }) {
   const [newSubtask, setNewSubtask] = useState("");
-  const [newAssignee, setNewAssignee] = useState("");
+  const [selectedAgentId, setSelectedAgentId] = useState<string>("");
 
   if (!task) return null;
 
@@ -589,15 +605,26 @@ function TaskDetailDialog({
     });
     setNewSubtask("");
   };
-  const addAssignee = () => {
-    if (!newAssignee.trim()) return;
+
+  const addAssigneeFromDropdown = (agentId: string) => {
+    if (!agentId) return;
+    const agent = AVAILABLE_AGENTS.find((a) => a.id === agentId);
+    if (!agent) return;
+    // Avoid duplicates
+    if (task.assignees.some((a) => a.id === agentId)) return;
     onUpdate({
-      assignees: [...task.assignees, { id: `u${Date.now()}`, display_name: newAssignee.trim() }],
+      assignees: [...task.assignees, { id: agent.id, display_name: agent.display_name }],
     });
-    setNewAssignee("");
+    setSelectedAgentId("");
   };
+
   const removeAssignee = (id: string) =>
     onUpdate({ assignees: task.assignees.filter((a) => a.id !== id) });
+
+  // Which agents are not yet assigned?
+  const unassignedAgents = AVAILABLE_AGENTS.filter(
+    (a) => !task.assignees.some((ta) => ta.id === a.id),
+  );
 
   return (
     <Dialog open={!!task} onOpenChange={(o) => !o && onClose()}>
@@ -680,7 +707,7 @@ function TaskDetailDialog({
             />
           </div>
 
-          {/* Assignees */}
+          {/* Assignees — now a dropdown of all available agents/users */}
           <div>
             <label className="mb-2 block text-[10px] uppercase tracking-wider text-muted-foreground">
               Assignees
@@ -709,16 +736,30 @@ function TaskDetailDialog({
               ))}
             </div>
             <div className="mt-2 flex gap-2">
-              <Input
-                value={newAssignee}
-                onChange={(e) => setNewAssignee(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addAssignee())}
-                placeholder="Add assignee name…"
-                className="h-8 bg-black/30 border-white/10"
-              />
-              <Button size="sm" variant="secondary" onClick={addAssignee}>
-                Add
-              </Button>
+              <Select
+                value={selectedAgentId}
+                onValueChange={(v) => {
+                  setSelectedAgentId(v);
+                  addAssigneeFromDropdown(v);
+                }}
+              >
+                <SelectTrigger className="h-8 bg-black/30 border-white/10 flex-1">
+                  <SelectValue placeholder="Add assignee…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unassignedAgents.length === 0 ? (
+                    <SelectItem value="__none__" disabled>
+                      All agents/users assigned
+                    </SelectItem>
+                  ) : (
+                    unassignedAgents.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.display_name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -772,7 +813,15 @@ function TaskDetailDialog({
           <Button variant="destructive" onClick={onDelete} className="mr-auto">
             <Trash2 className="h-4 w-4" /> Delete
           </Button>
-          <Button onClick={onClose} className="bg-emerald-500 text-black hover:bg-emerald-400">
+          <Button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
+            className="bg-emerald-500 text-black hover:bg-emerald-400"
+          >
             Done
           </Button>
         </DialogFooter>

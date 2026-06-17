@@ -7,8 +7,28 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/lib/auth";
+import { useNavigate } from "@tanstack/react-router";
 
 export function UserMenu({ onSettings }: { onSettings: () => void }) {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const displayName = user?.user_metadata?.display_name ?? user?.email?.split("@")[0] ?? "User";
+  const email = user?.email ?? "";
+  const initials = displayName
+    .split(" ")
+    .map((s: string) => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate({ to: "/signin" });
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -17,9 +37,9 @@ export function UserMenu({ onSettings }: { onSettings: () => void }) {
             className="flex h-7 w-7 items-center justify-center rounded-md font-mono text-xs font-bold text-background"
             style={{ background: "var(--gradient-emerald)" }}
           >
-            JL
+            {initials || "U"}
           </div>
-          <span className="hidden text-sm font-medium md:inline">Jamie L.</span>
+          <span className="hidden text-sm font-medium md:inline">{displayName}</span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
@@ -28,11 +48,11 @@ export function UserMenu({ onSettings }: { onSettings: () => void }) {
             className="flex h-9 w-9 items-center justify-center rounded-md font-mono text-sm font-bold text-background"
             style={{ background: "var(--gradient-emerald)" }}
           >
-            JL
+            {initials || "U"}
           </div>
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">Jamie Lin</div>
-            <div className="truncate text-xs text-muted-foreground">jamie@acme.com</div>
+            <div className="truncate text-sm font-semibold">{displayName}</div>
+            <div className="truncate text-xs text-muted-foreground">{email}</div>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -48,7 +68,10 @@ export function UserMenu({ onSettings }: { onSettings: () => void }) {
         </DropdownMenuItem>
         <DropdownMenuItem><Moon className="mr-2 h-3.5 w-3.5" />Theme: Dark</DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-rose-300 focus:text-rose-200">
+        <DropdownMenuItem
+          onClick={handleSignOut}
+          className="text-rose-300 focus:text-rose-200 cursor-pointer"
+        >
           <LogOut className="mr-2 h-3.5 w-3.5" />Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>

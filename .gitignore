@@ -34,3 +34,4 @@ dist-ssr
 *.env
 *env.examplekeys.txt
 keys.txt.pub
+.env.example

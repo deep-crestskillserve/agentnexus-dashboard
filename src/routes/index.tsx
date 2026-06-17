@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CommandDeck } from "@/components/clawbuddy/CommandDeck";
 import { AgentProfiles } from "@/components/clawbuddy/AgentProfiles";
 import { TaskBoard } from "@/components/clawbuddy/TaskBoard";
@@ -29,13 +29,15 @@ import {
   initialTasks,
   type TaskStatus,
 } from "@/components/clawbuddy/data";
+import { useAuth } from "@/lib/auth";
+import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "ClawBuddy — AI Agent Command Center" },
+      { title: "AgentNexus — AI Agent Command Center" },
       { name: "description", content: "Mission control for your AI workforce. Track agents, tasks, councils, and meeting intelligence in one premium command center." },
-      { property: "og:title", content: "ClawBuddy — AI Agent Command Center" },
+      { property: "og:title", content: "AgentNexus — AI Agent Command Center" },
       { property: "og:description", content: "Mission control for your AI workforce." },
     ],
   }),
@@ -43,6 +45,29 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
+  const { session, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && !session) {
+      navigate({ to: "/signin" });
+    }
+  }, [session, loading, navigate]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+      </div>
+    );
+  }
+
+  if (!session) return null;
+
+  return <Dashboard />;
+}
+
+function Dashboard() {
   const [section, setSection] = useState<SectionId>("deck");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [agents] = useState(initialAgents);
@@ -121,7 +146,7 @@ const titles: Record<SectionId, { title: string; sub: string }> = {
   meetings: { title: "Meeting Intelligence", sub: "Searchable summaries with AI insight." },
   council: { title: "Council", sub: "Multi-agent debates, decisions, and votes." },
   log: { title: "AI Log", sub: "A chronological feed from every agent." },
-  integrations: { title: "Integrations", sub: "Plug ClawBuddy into your stack." },
+  integrations: { title: "Integrations", sub: "Plug AgentNexus into your stack." },
   billing: { title: "Billing", sub: "Plan, usage, and invoice history." },
   settings: { title: "Settings", sub: "Workspace, profile, and preferences." },
   "live-dashboard": { title: "Live Dashboard", sub: "Real-time OpenClaw metrics from Supabase." },
