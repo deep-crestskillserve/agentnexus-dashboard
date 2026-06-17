@@ -158,7 +158,7 @@ function rowToTask(
     due_date: (row.due_date as string) ?? null,
     position: (row.position as number) ?? 0,
     created_at: row.created_at as string,
-    subtasks: [],   // subtasks are client-side only (not in DB schema yet)
+    subtasks: Array.isArray(row.subtasks) ? (row.subtasks as Subtask[]) : [],
     assignee,
   };
 }
@@ -230,6 +230,7 @@ export function TaskBoard() {
     if (patch.board_column_id !== undefined) dbPatch.status      = patch.board_column_id;
     if (patch.priority !== undefined)        dbPatch.priority    = patch.priority;
     if (patch.due_date !== undefined)        dbPatch.due_date    = patch.due_date;
+    if (patch.subtasks !== undefined)        dbPatch.subtasks    = patch.subtasks;
     if ("assignee" in patch) {
       dbPatch.assignee_id   = patch.assignee?.id ?? null;
       dbPatch.assignee_type = patch.assignee?.kind ?? null;
@@ -570,6 +571,7 @@ function TaskDetailDialog({
     <Dialog open={!!task} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="glass-card-elevated max-h-[90vh] overflow-y-auto border-white/10 sm:max-w-2xl">
         <DialogHeader>
+          <DialogTitle className="sr-only">{task.title || "Edit task"}</DialogTitle>
           <Input
             value={task.title}
             onChange={(e) => onUpdate({ title: e.target.value })}
