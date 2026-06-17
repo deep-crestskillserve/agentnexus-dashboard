@@ -263,6 +263,7 @@ export function TaskBoard() {
     board_column_id: ColumnId;
     due_date: string | null;
     assignee: Assignee | null;
+    subtasks: Subtask[];
   }) => {
     const { data, error } = await supabase
       .from("tasks")
@@ -274,6 +275,7 @@ export function TaskBoard() {
         due_date:      draft.due_date,
         assignee_id:   draft.assignee?.id ?? null,
         assignee_type: draft.assignee?.kind ?? null,
+        subtasks:      draft.subtasks,
       })
       .select()
       .single();
@@ -714,6 +716,7 @@ function NewTaskDialog({
     board_column_id: ColumnId;
     due_date: string | null;
     assignee: Assignee | null;
+    subtasks: Subtask[];
   }) => void;
   error?: string | null;
 }) {
@@ -723,10 +726,13 @@ function NewTaskDialog({
   const [column,      setColumn]      = useState<ColumnId>("todo");
   const [dueDate,     setDueDate]     = useState("");
   const [assigneeId,  setAssigneeId]  = useState<string>("__none__");
+  const [subtasks,    setSubtasks]    = useState<Subtask[]>([]);
+  const [newSubtask,  setNewSubtask]  = useState("");
 
   const reset = () => {
     setTitle(""); setDescription(""); setPriority("medium");
     setColumn("todo"); setDueDate(""); setAssigneeId("__none__");
+    setSubtasks([]); setNewSubtask("");
   };
 
   // Fresh form every time the dialog opens. Doesn't re-fire while it
@@ -735,12 +741,22 @@ function NewTaskDialog({
     if (open) reset();
   }, [open]);
 
+  const addSub = () => {
+    if (!newSubtask.trim()) return;
+    setSubtasks((p) => [...p, { id: `s${Date.now()}`, title: newSubtask.trim(), completed: false }]);
+    setNewSubtask("");
+  };
+  const toggleSub = (id: string) =>
+    setSubtasks((p) => p.map((s) => (s.id === id ? { ...s, completed: !s.completed } : s)));
+  const deleteSub = (id: string) =>
+    setSubtasks((p) => p.filter((s) => s.id !== id));
+
   const submit = () => {
     if (!title.trim()) return;
     const assignee = assigneeId === "__none__"
       ? null
       : (availableAssignees.find((a) => a.id === assigneeId) ?? null);
-    onCreate({ title: title.trim(), description: description.trim(), priority, board_column_id: column, due_date: dueDate || null, assignee });
+    onCreate({ title: title.trim(), description: description.trim(), priority, board_column_id: column, due_date: dueDate || null, assignee, subtasks });
   };
 
   return (
@@ -810,6 +826,36 @@ function NewTaskDialog({
             </Select>
           </div>
         </div>
+
+        <div>
+          <label className="mb-2 block text-[10px] uppercase tracking-wider text-muted-foreground">
+            Subtasks ({subtasks.filter((s) => s.completed).length}/{subtasks.length})
+          </label>
+          <div className="space-y-1.5">
+            {subtasks.map((s) => (
+              <div key={s.id} className="group flex items-center gap-2 rounded-md border border-white/5 bg-black/20 px-2 py-1.5">
+                <Checkbox checked={s.completed} onCheckedChange={() => toggleSub(s.id)} />
+                <span className={`flex-1 text-sm ${s.completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                  {s.title}
+                </span>
+                <button onClick={() => deleteSub(s.id)} className="opacity-0 transition-opacity group-hover:opacity-100">
+                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-400" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <Input
+              value={newSubtask}
+              onChange={(e) => setNewSubtask(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSub())}
+              placeholder="Add subtask…"
+              className="h-8 bg-black/30 border-white/10"
+            />
+            <Button size="sm" variant="secondary" onClick={addSub}>Add</Button>
+          </div>
+        </div>
+
         {error && (
           <p className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
             Couldn't create task: {error}
