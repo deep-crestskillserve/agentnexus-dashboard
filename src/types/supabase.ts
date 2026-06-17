@@ -1,5 +1,5 @@
 export type AgentStatus = "active" | "idle" | "error" | "offline";
-export type TaskStatus = "todo" | "doing" | "needs_input" | "done";
+export type TaskStatus = "todo" | "doing" | "needs_input" | "done" | "canceled";
 export type Priority = "low" | "medium" | "high" | "urgent";
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type WorkflowStatus = "running" | "completed" | "failed" | "pending";
@@ -17,10 +17,13 @@ export interface Agent {
 export interface Task {
   id: string;
   assignee_id: string | null;
+  assignee_type: "agent" | "user" | null;
   title: string;
   description: string | null;
   status: TaskStatus;
   priority: Priority;
+  due_date: string | null;
+  position: number;
   created_at: string;
   updated_at: string;
 }

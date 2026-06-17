@@ -9,11 +9,14 @@ export const AgentStatusSchema = z.object({
 });
 
 export const TaskSchema = z.object({
-  agent_id: z.string().uuid().optional().nullable(),
+  assignee_id: z.string().uuid().optional().nullable(),
+  assignee_type: z.enum(["agent", "user"]).optional().nullable(),
   title: z.string().min(1),
   description: z.string().optional().nullable(),
-  status: z.enum(["todo", "doing", "needs_input", "done"]).default("todo"),
+  status: z.enum(["todo", "doing", "needs_input", "done", "canceled"]).default("todo"),
   priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+  due_date: z.string().optional().nullable(),
+  position: z.number().int().optional(),
 });
 
 export const LogSchema = z.object({

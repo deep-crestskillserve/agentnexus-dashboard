@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Inbox, Plus, Search, Trash2, User, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,12 +131,22 @@ function rowToTask(
   users: SupabaseUser[],
 ): BoardTask {
   const assigneeId = row.assignee_id as string | null;
+  const assigneeType = row.assignee_type as "agent" | "user" | null;
   let assignee: Assignee | null = null;
   if (assigneeId) {
-    const agent = agents.find((a) => a.id === assigneeId);
-    const user  = users.find((u) => u.id === assigneeId);
-    if (agent) assignee = agentToAssignee(agent);
-    else if (user) assignee = userToAssignee(user);
+    if (assigneeType === "agent") {
+      const agent = agents.find((a) => a.id === assigneeId);
+      if (agent) assignee = agentToAssignee(agent);
+    } else if (assigneeType === "user") {
+      const user = users.find((u) => u.id === assigneeId);
+      if (user) assignee = userToAssignee(user);
+    } else {
+      // Older rows without assignee_type — fall back to id matching
+      const agent = agents.find((a) => a.id === assigneeId);
+      const user  = users.find((u) => u.id === assigneeId);
+      if (agent) assignee = agentToAssignee(agent);
+      else if (user) assignee = userToAssignee(user);
+    }
   }
 
   return {
@@ -164,6 +174,7 @@ export function TaskBoard() {
   const [priorityFilter, setPriorityFilter] = useState<"all" | Priority>("all");
   const [openTaskId,    setOpenTaskId]    = useState<string | null>(null);
   const [newOpen,       setNewOpen]       = useState(false);
+  const [addError,      setAddError]      = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [dragId,        setDragId]        = useState<string | null>(null);
   const [overCol,       setOverCol]       = useState<ColumnId | null>(null);
@@ -219,23 +230,29 @@ export function TaskBoard() {
     if (patch.board_column_id !== undefined) dbPatch.status      = patch.board_column_id;
     if (patch.priority !== undefined)        dbPatch.priority    = patch.priority;
     if (patch.due_date !== undefined)        dbPatch.due_date    = patch.due_date;
-    if ("assignee" in patch)                 dbPatch.assignee_id = patch.assignee?.id ?? null;
+    if ("assignee" in patch) {
+      dbPatch.assignee_id   = patch.assignee?.id ?? null;
+      dbPatch.assignee_type = patch.assignee?.kind ?? null;
+    }
 
     if (Object.keys(dbPatch).length > 0) {
-      await supabase.from("tasks").update(dbPatch).eq("id", id);
+      const { error } = await supabase.from("tasks").update(dbPatch).eq("id", id);
+      if (error) console.error("Failed to save task changes:", error.message);
     }
   };
 
   const moveTask = async (id: string, colId: ColumnId) => {
     updateTaskLocally(id, { board_column_id: colId });
-    await supabase.from("tasks").update({ status: colId }).eq("id", id);
+    const { error } = await supabase.from("tasks").update({ status: colId }).eq("id", id);
+    if (error) console.error("Failed to move task:", error.message);
   };
 
   const deleteTask = async (id: string) => {
     setTasks((p) => p.filter((t) => t.id !== id));
     setConfirmDelete(null);
     setOpenTaskId(null);
-    await supabase.from("tasks").delete().eq("id", id);
+    const { error } = await supabase.from("tasks").delete().eq("id", id);
+    if (error) console.error("Failed to delete task:", error.message);
   };
 
   const addTask = async (draft: {
@@ -249,19 +266,25 @@ export function TaskBoard() {
     const { data, error } = await supabase
       .from("tasks")
       .insert({
-        title:       draft.title,
-        description: draft.description,
-        status:      draft.board_column_id,
-        priority:    draft.priority,
-        due_date:    draft.due_date,
-        assignee_id: draft.assignee?.id ?? null,
+        title:         draft.title,
+        description:   draft.description,
+        status:        draft.board_column_id,
+        priority:      draft.priority,
+        due_date:      draft.due_date,
+        assignee_id:   draft.assignee?.id ?? null,
+        assignee_type: draft.assignee?.kind ?? null,
       })
       .select()
       .single();
 
-    if (!error && data) {
-      setTasks((p) => [rowToTask(data, agents, users), ...p]);
+    if (error) {
+      console.error("Failed to create task:", error.message);
+      setAddError(error.message);
+      return;
     }
+
+    setTasks((p) => [rowToTask(data, agents, users), ...p]);
+    setAddError(null);
     setNewOpen(false);
   };
 
@@ -406,9 +429,10 @@ export function TaskBoard() {
       {/* New task dialog */}
       <NewTaskDialog
         open={newOpen}
-        onOpenChange={setNewOpen}
+        onOpenChange={(o) => { setNewOpen(o); if (o) setAddError(null); }}
         availableAssignees={availableAssignees}
         onCreate={addTask}
+        error={addError}
       />
 
       {/* Delete confirm */}
@@ -676,6 +700,7 @@ function NewTaskDialog({
   onOpenChange,
   availableAssignees,
   onCreate,
+  error,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -688,6 +713,7 @@ function NewTaskDialog({
     due_date: string | null;
     assignee: Assignee | null;
   }) => void;
+  error?: string | null;
 }) {
   const [title,       setTitle]       = useState("");
   const [description, setDescription] = useState("");
@@ -701,17 +727,22 @@ function NewTaskDialog({
     setColumn("todo"); setDueDate(""); setAssigneeId("__none__");
   };
 
+  // Fresh form every time the dialog opens. Doesn't re-fire while it
+  // stays open after a failed submit, so input + error message persist.
+  useEffect(() => {
+    if (open) reset();
+  }, [open]);
+
   const submit = () => {
     if (!title.trim()) return;
     const assignee = assigneeId === "__none__"
       ? null
       : (availableAssignees.find((a) => a.id === assigneeId) ?? null);
     onCreate({ title: title.trim(), description: description.trim(), priority, board_column_id: column, due_date: dueDate || null, assignee });
-    reset();
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="glass-card-elevated border-white/10 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>New task</DialogTitle>
@@ -777,6 +808,11 @@ function NewTaskDialog({
             </Select>
           </div>
         </div>
+        {error && (
+          <p className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+            Couldn't create task: {error}
+          </p>
+        )}
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button

@@ -103,7 +103,8 @@ curl -X POST https://your-dashboard.vercel.app/api/openclaw/agent-status \
 curl -X POST https://your-dashboard.vercel.app/api/openclaw/task \
   -H "Content-Type: application/json" \
   -d '{
-    "agent_id": "uuid-of-agent",
+    "assignee_id": "uuid-of-agent-or-user",
+    "assignee_type": "agent",
     "title": "Summarise Q3 earnings report",
     "description": "Extract key financials and write a 3-paragraph summary",
     "status": "todo",
