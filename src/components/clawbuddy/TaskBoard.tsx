@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useMemo, useState } from "react";
-import { CalendarDays, Inbox, Plus, Search, Trash2, User } from "lucide-react";
+import { CalendarDays, Inbox, Plus, Search, Trash2, User, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,7 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { initialAgents } from "@/components/clawbuddy/data";
+import { supabase } from "@/lib/supabase/client";
+import { useAgents } from "@/hooks/useAgents";
+import { useUsers } from "@/hooks/useUsers";
+import type { Agent, User as SupabaseUser } from "@/types/supabase";
 
 // ───────────────── Types ─────────────────
 type ColumnId = "todo" | "doing" | "needs_input" | "done" | "canceled";
@@ -40,9 +43,11 @@ interface Subtask {
   completed: boolean;
 }
 
+// A unified assignee — could be an Agent or a human User
 interface Assignee {
-  id: string;
+  id: string;           // UUID from agents or users table
   display_name: string;
+  kind: "agent" | "user";
 }
 
 interface BoardTask {
@@ -54,50 +59,29 @@ interface BoardTask {
   due_date: string | null;
   position: number;
   created_at: string;
-  subtasks: Subtask[];
-  assignees: Assignee[];
+  subtasks: Subtask[];   // stored as JSONB in a real schema; here kept client-side
+  assignee: Assignee | null;  // single assignee (tasks.assignee_id FK)
 }
 
 // ───────────────── Constants ─────────────────
 const COLUMNS: BoardColumn[] = [
-  { id: "todo", name: "To Do", color: "#ef4444", position: 0 },
-  { id: "doing", name: "Doing", color: "#f59e0b", position: 1 },
+  { id: "todo",        name: "To Do",       color: "#ef4444", position: 0 },
+  { id: "doing",       name: "Doing",       color: "#f59e0b", position: 1 },
   { id: "needs_input", name: "Needs Input", color: "#a855f7", position: 2 },
-  { id: "done", name: "Done", color: "#10b981", position: 3 },
-  { id: "canceled", name: "Canceled", color: "#6b7280", position: 4 },
+  { id: "done",        name: "Done",        color: "#10b981", position: 3 },
+  { id: "canceled",    name: "Canceled",    color: "#6b7280", position: 4 },
 ];
 
 const PRIORITY_STYLES: Record<Priority, { label: string; cls: string; bar: string }> = {
-  urgent: { label: "Urgent", cls: "bg-red-500/15 text-red-300 border border-red-500/30", bar: "bg-red-500" },
-  high: { label: "High", cls: "bg-orange-500/15 text-orange-300 border border-orange-500/30", bar: "bg-orange-500" },
-  medium: { label: "Medium", cls: "bg-blue-500/15 text-blue-300 border border-blue-500/30", bar: "bg-blue-500" },
-  low: { label: "Low", cls: "bg-gray-500/15 text-gray-300 border border-gray-500/30", bar: "bg-gray-500" },
+  urgent: { label: "Urgent", cls: "bg-red-500/15 text-red-300 border border-red-500/30",      bar: "bg-red-500" },
+  high:   { label: "High",   cls: "bg-orange-500/15 text-orange-300 border border-orange-500/30", bar: "bg-orange-500" },
+  medium: { label: "Medium", cls: "bg-blue-500/15 text-blue-300 border border-blue-500/30",   bar: "bg-blue-500" },
+  low:    { label: "Low",    cls: "bg-gray-500/15 text-gray-300 border border-gray-500/30",   bar: "bg-gray-500" },
 };
 
 const AVATAR_COLORS = [
-  "bg-emerald-500",
-  "bg-cyan-500",
-  "bg-violet-500",
-  "bg-amber-500",
-  "bg-rose-500",
-  "bg-blue-500",
-  "bg-fuchsia-500",
-  "bg-teal-500",
-];
-
-// Build the available agents list from data.ts (agents + humans from meetings)
-const AVAILABLE_AGENTS: Assignee[] = [
-  ...initialAgents.map((a) => ({ id: a.id, display_name: `${a.emoji} ${a.name}` })),
-  // Human users extracted from data
-  { id: "alice", display_name: "👤 Alice Chen" },
-  { id: "bob", display_name: "👤 Bob Reyes" },
-  { id: "charlie", display_name: "👤 Charlie Park" },
-  { id: "dana", display_name: "👤 Dana Kim" },
-  { id: "eli", display_name: "👤 Eli Singh" },
-  { id: "faye", display_name: "👤 Faye Ortiz" },
-  { id: "sasha", display_name: "👤 Sasha Wu" },
-  { id: "priya", display_name: "👤 Priya Shah" },
-  { id: "morgan", display_name: "👤 Morgan Lee" },
+  "bg-emerald-500", "bg-cyan-500", "bg-violet-500", "bg-amber-500",
+  "bg-rose-500", "bg-blue-500", "bg-fuchsia-500", "bg-teal-500",
 ];
 
 function colorFor(seed: string) {
@@ -107,9 +91,9 @@ function colorFor(seed: string) {
 }
 
 function initials(name: string) {
-  // Strip emojis for initials
-  const clean = name.replace(/\p{Emoji}/gu, "").trim();
-  return clean
+  return name
+    .replace(/\p{Emoji}/gu, "")
+    .trim()
     .split(/\s+/)
     .map((s) => s[0])
     .filter(Boolean)
@@ -118,202 +102,176 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-function daysFromNow(d: number) {
-  const dt = new Date();
-  dt.setDate(dt.getDate() + d);
-  return dt.toISOString().slice(0, 10);
-}
-
 function relativeDate(iso: string) {
   const d = new Date(iso + "T00:00:00");
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
-  if (diff === 0) return { label: "Today", overdue: false };
-  if (diff === 1) return { label: "Tomorrow", overdue: false };
-  if (diff === -1) return { label: "Yesterday", overdue: true };
-  if (diff < 0) return { label: `${-diff}d overdue`, overdue: true };
-  if (diff < 7) return { label: `in ${diff}d`, overdue: false };
+  if (diff === 0)  return { label: "Today",            overdue: false };
+  if (diff === 1)  return { label: "Tomorrow",         overdue: false };
+  if (diff === -1) return { label: "Yesterday",        overdue: true  };
+  if (diff < 0)   return { label: `${-diff}d overdue`, overdue: true  };
+  if (diff < 7)   return { label: `in ${diff}d`,       overdue: false };
+  return { label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }), overdue: false };
+}
+
+// ───────────────── Helpers to build unified assignee lists ─────────────────
+function agentToAssignee(a: Agent): Assignee {
+  return { id: a.id, display_name: `🤖 ${a.name}`, kind: "agent" };
+}
+
+function userToAssignee(u: SupabaseUser): Assignee {
+  return { id: u.id, display_name: `👤 ${u.display_name ?? u.name}`, kind: "user" };
+}
+
+// Map a Supabase task row to our BoardTask shape
+function rowToTask(
+  row: Record<string, unknown>,
+  agents: Agent[],
+  users: SupabaseUser[],
+): BoardTask {
+  const assigneeId = row.assignee_id as string | null;
+  let assignee: Assignee | null = null;
+  if (assigneeId) {
+    const agent = agents.find((a) => a.id === assigneeId);
+    const user  = users.find((u) => u.id === assigneeId);
+    if (agent) assignee = agentToAssignee(agent);
+    else if (user) assignee = userToAssignee(user);
+  }
+
   return {
-    label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-    overdue: false,
+    id: row.id as string,
+    title: row.title as string,
+    description: (row.description as string) ?? "",
+    board_column_id: ((row.status as string) ?? "todo") as ColumnId,
+    priority: ((row.priority as string) ?? "medium") as Priority,
+    due_date: (row.due_date as string) ?? null,
+    position: (row.position as number) ?? 0,
+    created_at: row.created_at as string,
+    subtasks: [],   // subtasks are client-side only (not in DB schema yet)
+    assignee,
   };
 }
 
-// ───────────────── Mock seed ─────────────────
-const SEED: BoardTask[] = [
-  {
-    id: "t1",
-    title: "Refactor authentication middleware",
-    description:
-      "Split monolithic auth handler into composable middleware. Replace cookie parsing with the new shared helper and remove duplicated session checks across routes.",
-    board_column_id: "doing",
-    priority: "high",
-    due_date: daysFromNow(2),
-    position: 0,
-    created_at: new Date().toISOString(),
-    subtasks: [
-      { id: "s1", title: "Extract session helper", completed: true },
-      { id: "s2", title: "Replace cookie parsing", completed: true },
-      { id: "s3", title: "Update route guards", completed: false },
-      { id: "s4", title: "Backfill tests", completed: false },
-    ],
-    assignees: [
-      { id: "alice", display_name: "👤 Alice Chen" },
-      { id: "alpha", display_name: "🤖 Agent Alpha" },
-    ],
-  },
-  {
-    id: "t2",
-    title: "Migrate billing schema v2",
-    description: "Cutover plan, rollback rehearsal, and dry-run on staging before Friday window.",
-    board_column_id: "todo",
-    priority: "urgent",
-    due_date: daysFromNow(-1),
-    position: 0,
-    created_at: new Date().toISOString(),
-    subtasks: [
-      { id: "s5", title: "Write migration script", completed: false },
-      { id: "s6", title: "Rollback rehearsal", completed: false },
-    ],
-    assignees: [{ id: "alice", display_name: "👤 Alice Chen" }],
-  },
-  {
-    id: "t3",
-    title: "Triage new feature requests",
-    description: "Sort the inbox of 38 incoming requests into themes and priorities.",
-    board_column_id: "todo",
-    priority: "medium",
-    due_date: daysFromNow(5),
-    position: 1,
-    created_at: new Date().toISOString(),
-    subtasks: [],
-    assignees: [
-      { id: "dispatch", display_name: "📋 Dispatch Bot" },
-      { id: "charlie", display_name: "👤 Charlie Park" },
-    ],
-  },
-  {
-    id: "t4",
-    title: "Confirm vendor compliance docs",
-    description: "Awaiting SOC2 attachment and processor list from legal.",
-    board_column_id: "needs_input",
-    priority: "high",
-    due_date: daysFromNow(3),
-    position: 0,
-    created_at: new Date().toISOString(),
-    subtasks: [
-      { id: "s7", title: "Receive SOC2 docs", completed: false },
-      { id: "s8", title: "File with compliance", completed: false },
-    ],
-    assignees: [{ id: "audit", display_name: "🛡️ Audit Bot" }],
-  },
-  {
-    id: "t5",
-    title: "Investigate spike in 500s",
-    description: "P95 jumped on the gateway around 14:00 UTC. Need observability traces.",
-    board_column_id: "needs_input",
-    priority: "urgent",
-    due_date: null,
-    position: 1,
-    created_at: new Date().toISOString(),
-    subtasks: [],
-    assignees: [{ id: "alpha", display_name: "🤖 Agent Alpha" }],
-  },
-  {
-    id: "t6",
-    title: "Patch CVE-2026-1131",
-    description: "Hotfix shipped to production. Postmortem drafted.",
-    board_column_id: "done",
-    priority: "urgent",
-    due_date: daysFromNow(-3),
-    position: 0,
-    created_at: new Date().toISOString(),
-    subtasks: [
-      { id: "s9", title: "Ship hotfix", completed: true },
-      { id: "s10", title: "Write postmortem", completed: true },
-    ],
-    assignees: [{ id: "charlie", display_name: "👤 Charlie Park" }],
-  },
-  {
-    id: "t7",
-    title: "Archive stale projects",
-    description: "Auto-archived 7 projects older than 30 days.",
-    board_column_id: "done",
-    priority: "low",
-    due_date: null,
-    position: 1,
-    created_at: new Date().toISOString(),
-    subtasks: [],
-    assignees: [{ id: "audit", display_name: "🛡️ Audit Bot" }],
-  },
-  {
-    id: "t8",
-    title: "Legacy dashboard rewrite",
-    description: "Deprecated in favor of the new analytics module.",
-    board_column_id: "canceled",
-    priority: "low",
-    due_date: null,
-    position: 0,
-    created_at: new Date().toISOString(),
-    subtasks: [],
-    assignees: [],
-  },
-];
+// ───────────────── Main Component ─────────────────
+export function TaskBoard() {
+  const { agents, loading: agentsLoading } = useAgents();
+  const { users,  loading: usersLoading  } = useUsers();
 
-// ───────────────── Component ─────────────────
-export function TaskBoard(_props?: unknown) {
-  const [tasks, setTasks] = useState<BoardTask[]>(SEED);
-  const [query, setQuery] = useState("");
+  const [tasks,         setTasks]         = useState<BoardTask[]>([]);
+  const [tasksLoading,  setTasksLoading]  = useState(true);
+  const [query,         setQuery]         = useState("");
   const [priorityFilter, setPriorityFilter] = useState<"all" | Priority>("all");
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
-  const [newOpen, setNewOpen] = useState(false);
+  const [openTaskId,    setOpenTaskId]    = useState<string | null>(null);
+  const [newOpen,       setNewOpen]       = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [overCol, setOverCol] = useState<ColumnId | null>(null);
-  const [mobileCol, setMobileCol] = useState<ColumnId>("todo");
+  const [dragId,        setDragId]        = useState<string | null>(null);
+  const [overCol,       setOverCol]       = useState<ColumnId | null>(null);
+  const [mobileCol,     setMobileCol]     = useState<ColumnId>("todo");
 
-  const filtered = useMemo(() => {
-    return tasks.filter((t) => {
-      if (priorityFilter !== "all" && t.priority !== priorityFilter) return false;
-      if (query.trim()) {
-        const q = query.toLowerCase();
-        if (!t.title.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q))
-          return false;
-      }
-      return true;
-    });
-  }, [tasks, query, priorityFilter]);
+  const loading = agentsLoading || usersLoading || tasksLoading;
 
-  const openTask = tasks.find((t) => t.id === openTaskId) || null;
+  // ── Fetch tasks from Supabase once agents+users are loaded ──
+  useMemo(() => {
+    if (agentsLoading || usersLoading) return;
+    supabase
+      .from("tasks")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (!error && data) {
+          setTasks(data.map((row) => rowToTask(row, agents, users)));
+        }
+        setTasksLoading(false);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentsLoading, usersLoading]);
 
-  const updateTask = (id: string, patch: Partial<BoardTask>) =>
+  // ── Unified assignee list (agents + users) ──
+  const availableAssignees: Assignee[] = useMemo(() => [
+    ...agents.map(agentToAssignee),
+    ...users.map(userToAssignee),
+  ], [agents, users]);
+
+  const filtered = useMemo(() => tasks.filter((t) => {
+    if (priorityFilter !== "all" && t.priority !== priorityFilter) return false;
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      if (!t.title.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q))
+        return false;
+    }
+    return true;
+  }), [tasks, query, priorityFilter]);
+
+  const openTask = tasks.find((t) => t.id === openTaskId) ?? null;
+
+  // ── Local + Supabase update helpers ──
+  const updateTaskLocally = (id: string, patch: Partial<BoardTask>) =>
     setTasks((p) => p.map((t) => (t.id === id ? { ...t, ...patch } : t)));
 
-  const moveTask = (id: string, colId: ColumnId) =>
-    setTasks((p) => p.map((t) => (t.id === id ? { ...t, board_column_id: colId } : t)));
+  const persistTask = async (id: string, patch: Partial<BoardTask>) => {
+    updateTaskLocally(id, patch);
 
-  const deleteTask = (id: string) => {
+    // Map BoardTask fields → DB column names
+    const dbPatch: Record<string, unknown> = {};
+    if (patch.title !== undefined)           dbPatch.title       = patch.title;
+    if (patch.description !== undefined)     dbPatch.description = patch.description;
+    if (patch.board_column_id !== undefined) dbPatch.status      = patch.board_column_id;
+    if (patch.priority !== undefined)        dbPatch.priority    = patch.priority;
+    if (patch.due_date !== undefined)        dbPatch.due_date    = patch.due_date;
+    if ("assignee" in patch)                 dbPatch.assignee_id = patch.assignee?.id ?? null;
+
+    if (Object.keys(dbPatch).length > 0) {
+      await supabase.from("tasks").update(dbPatch).eq("id", id);
+    }
+  };
+
+  const moveTask = async (id: string, colId: ColumnId) => {
+    updateTaskLocally(id, { board_column_id: colId });
+    await supabase.from("tasks").update({ status: colId }).eq("id", id);
+  };
+
+  const deleteTask = async (id: string) => {
     setTasks((p) => p.filter((t) => t.id !== id));
     setConfirmDelete(null);
     setOpenTaskId(null);
+    await supabase.from("tasks").delete().eq("id", id);
   };
 
-  const addTask = (t: Omit<BoardTask, "id" | "position" | "created_at" | "subtasks" | "assignees">) => {
-    const id = `t${Date.now()}`;
-    setTasks((p) => [
-      ...p,
-      {
-        ...t,
-        id,
-        position: p.filter((x) => x.board_column_id === t.board_column_id).length,
-        created_at: new Date().toISOString(),
-        subtasks: [],
-        assignees: [],
-      },
-    ]);
+  const addTask = async (draft: {
+    title: string;
+    description: string;
+    priority: Priority;
+    board_column_id: ColumnId;
+    due_date: string | null;
+    assignee: Assignee | null;
+  }) => {
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert({
+        title:       draft.title,
+        description: draft.description,
+        status:      draft.board_column_id,
+        priority:    draft.priority,
+        due_date:    draft.due_date,
+        assignee_id: draft.assignee?.id ?? null,
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      setTasks((p) => [rowToTask(data, agents, users), ...p]);
+    }
     setNewOpen(false);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -389,16 +347,9 @@ export function TaskBoard(_props?: unknown) {
           return (
             <div
               key={col.id}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setOverCol(col.id);
-              }}
+              onDragOver={(e) => { e.preventDefault(); setOverCol(col.id); }}
               onDragLeave={() => setOverCol((o) => (o === col.id ? null : o))}
-              onDrop={() => {
-                if (dragId) moveTask(dragId, col.id);
-                setDragId(null);
-                setOverCol(null);
-              }}
+              onDrop={() => { if (dragId) moveTask(dragId, col.id); setDragId(null); setOverCol(null); }}
               className={`glass-card flex min-h-[400px] flex-col p-3 transition-all md:max-h-[calc(100vh-260px)] ${
                 overCol === col.id ? "ring-1 ring-emerald-500/50 shadow-[0_0_30px_-8px_rgba(16,185,129,0.5)]" : ""
               } ${visible ? "" : "hidden md:flex"}`}
@@ -446,13 +397,19 @@ export function TaskBoard(_props?: unknown) {
       {/* Detail dialog */}
       <TaskDetailDialog
         task={openTask}
+        availableAssignees={availableAssignees}
         onClose={() => setOpenTaskId(null)}
-        onUpdate={(patch) => openTask && updateTask(openTask.id, patch)}
+        onUpdate={(patch) => openTask && persistTask(openTask.id, patch)}
         onDelete={() => openTask && setConfirmDelete(openTask.id)}
       />
 
       {/* New task dialog */}
-      <NewTaskDialog open={newOpen} onOpenChange={setNewOpen} onCreate={addTask} />
+      <NewTaskDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        availableAssignees={availableAssignees}
+        onCreate={addTask}
+      />
 
       {/* Delete confirm */}
       <Dialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
@@ -462,9 +419,7 @@ export function TaskBoard(_props?: unknown) {
             <DialogDescription>This can't be undone.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setConfirmDelete(null)}>
-              Cancel
-            </Button>
+            <Button variant="ghost" onClick={() => setConfirmDelete(null)}>Cancel</Button>
             <Button variant="destructive" onClick={() => confirmDelete && deleteTask(confirmDelete)}>
               <Trash2 className="h-4 w-4" /> Delete
             </Button>
@@ -488,11 +443,9 @@ function TaskCard({
   onDragEnd: () => void;
 }) {
   const pri = PRIORITY_STYLES[task.priority];
-  const done = task.subtasks.filter((s) => s.completed).length;
+  const done  = task.subtasks.filter((s) => s.completed).length;
   const total = task.subtasks.length;
-  const due = task.due_date ? relativeDate(task.due_date) : null;
-  const visibleAssignees = task.assignees.slice(0, 3);
-  const overflow = task.assignees.length - visibleAssignees.length;
+  const due   = task.due_date ? relativeDate(task.due_date) : null;
 
   return (
     <motion.div
@@ -519,50 +472,28 @@ function TaskCard({
       )}
       {total > 0 && (
         <div className="mt-2.5">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground tabular-nums">
-              {done}/{total} subtasks
-            </span>
-          </div>
-          <div className="h-1 overflow-hidden rounded-full bg-white/5">
-            <div
-              className="h-full bg-emerald-500"
-              style={{ width: `${(done / total) * 100}%` }}
-            />
+          <span className="text-[10px] text-muted-foreground tabular-nums">{done}/{total} subtasks</span>
+          <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/5">
+            <div className="h-full bg-emerald-500" style={{ width: `${(done / total) * 100}%` }} />
           </div>
         </div>
       )}
       <div className="mt-3 flex items-center justify-between">
-        <div className="flex -space-x-1.5">
-          {visibleAssignees.length === 0 ? (
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/5 ring-2 ring-[#0a0a0f]">
-              <User className="h-3 w-3 text-muted-foreground" />
-            </div>
-          ) : (
-            visibleAssignees.map((a) => (
-              <div
-                key={a.id}
-                title={a.display_name}
-                className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold text-white ring-2 ring-[#0a0a0f] ${colorFor(
-                  a.display_name,
-                )}`}
-              >
-                {initials(a.display_name)}
-              </div>
-            ))
-          )}
-          {overflow > 0 && (
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[10px] font-semibold text-foreground ring-2 ring-[#0a0a0f]">
-              +{overflow}
-            </div>
-          )}
-        </div>
-        {due && (
-          <span
-            className={`flex items-center gap-1 text-[10px] tabular-nums ${
-              due.overdue ? "text-red-400" : "text-muted-foreground"
-            }`}
+        {/* Assignee avatar */}
+        {task.assignee ? (
+          <div
+            title={task.assignee.display_name}
+            className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold text-white ring-2 ring-[#0a0a0f] ${colorFor(task.assignee.display_name)}`}
           >
+            {initials(task.assignee.display_name)}
+          </div>
+        ) : (
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/5 ring-2 ring-[#0a0a0f]">
+            <User className="h-3 w-3 text-muted-foreground" />
+          </div>
+        )}
+        {due && (
+          <span className={`flex items-center gap-1 text-[10px] tabular-nums ${due.overdue ? "text-red-400" : "text-muted-foreground"}`}>
             <CalendarDays className="h-3 w-3" />
             {due.label}
           </span>
@@ -575,56 +506,41 @@ function TaskCard({
 // ───────────────── Detail dialog ─────────────────
 function TaskDetailDialog({
   task,
+  availableAssignees,
   onClose,
   onUpdate,
   onDelete,
 }: {
   task: BoardTask | null;
+  availableAssignees: Assignee[];
   onClose: () => void;
   onUpdate: (patch: Partial<BoardTask>) => void;
   onDelete: () => void;
 }) {
   const [newSubtask, setNewSubtask] = useState("");
-  const [selectedAgentId, setSelectedAgentId] = useState<string>("");
 
   if (!task) return null;
 
   const toggleSub = (id: string) =>
-    onUpdate({
-      subtasks: task.subtasks.map((s) => (s.id === id ? { ...s, completed: !s.completed } : s)),
-    });
+    onUpdate({ subtasks: task.subtasks.map((s) => (s.id === id ? { ...s, completed: !s.completed } : s)) });
   const deleteSub = (id: string) =>
     onUpdate({ subtasks: task.subtasks.filter((s) => s.id !== id) });
   const addSub = () => {
     if (!newSubtask.trim()) return;
-    onUpdate({
-      subtasks: [
-        ...task.subtasks,
-        { id: `s${Date.now()}`, title: newSubtask.trim(), completed: false },
-      ],
-    });
+    onUpdate({ subtasks: [...task.subtasks, { id: `s${Date.now()}`, title: newSubtask.trim(), completed: false }] });
     setNewSubtask("");
   };
 
-  const addAssigneeFromDropdown = (agentId: string) => {
-    if (!agentId) return;
-    const agent = AVAILABLE_AGENTS.find((a) => a.id === agentId);
-    if (!agent) return;
-    // Avoid duplicates
-    if (task.assignees.some((a) => a.id === agentId)) return;
-    onUpdate({
-      assignees: [...task.assignees, { id: agent.id, display_name: agent.display_name }],
-    });
-    setSelectedAgentId("");
+  const currentAssigneeId = task.assignee?.id ?? "__none__";
+
+  const handleAssigneeChange = (value: string) => {
+    if (value === "__none__") {
+      onUpdate({ assignee: null });
+    } else {
+      const found = availableAssignees.find((a) => a.id === value);
+      if (found) onUpdate({ assignee: found });
+    }
   };
-
-  const removeAssignee = (id: string) =>
-    onUpdate({ assignees: task.assignees.filter((a) => a.id !== id) });
-
-  // Which agents are not yet assigned?
-  const unassignedAgents = AVAILABLE_AGENTS.filter(
-    (a) => !task.assignees.some((ta) => ta.id === a.id),
-  );
 
   return (
     <Dialog open={!!task} onOpenChange={(o) => !o && onClose()}>
@@ -635,56 +551,34 @@ function TaskDetailDialog({
             onChange={(e) => onUpdate({ title: e.target.value })}
             className="border-none bg-transparent px-0 text-lg font-semibold focus-visible:ring-0"
           />
-          <DialogDescription>Edit task details, subtasks, and assignees.</DialogDescription>
+          <DialogDescription>Edit task details, subtasks, and assignee.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
           {/* Meta row */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             <div>
-              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">
-                Priority
-              </label>
-              <Select
-                value={task.priority}
-                onValueChange={(v: Priority) => onUpdate({ priority: v })}
-              >
-                <SelectTrigger className="h-9 bg-black/30 border-white/10">
-                  <SelectValue />
-                </SelectTrigger>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">Priority</label>
+              <Select value={task.priority} onValueChange={(v: Priority) => onUpdate({ priority: v })}>
+                <SelectTrigger className="h-9 bg-black/30 border-white/10"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {(["urgent", "high", "medium", "low"] as Priority[]).map((p) => (
-                    <SelectItem key={p} value={p} className="capitalize">
-                      {p}
-                    </SelectItem>
+                    <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">
-                Column
-              </label>
-              <Select
-                value={task.board_column_id}
-                onValueChange={(v: ColumnId) => onUpdate({ board_column_id: v })}
-              >
-                <SelectTrigger className="h-9 bg-black/30 border-white/10">
-                  <SelectValue />
-                </SelectTrigger>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">Column</label>
+              <Select value={task.board_column_id} onValueChange={(v: ColumnId) => onUpdate({ board_column_id: v })}>
+                <SelectTrigger className="h-9 bg-black/30 border-white/10"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {COLUMNS.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
+                  {COLUMNS.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">
-                Due date
-              </label>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">Due date</label>
               <Input
                 type="date"
                 value={task.due_date ?? ""}
@@ -692,75 +586,40 @@ function TaskDetailDialog({
                 className="h-9 bg-black/30 border-white/10"
               />
             </div>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">Assignee</label>
+              <Select value={currentAssigneeId} onValueChange={handleAssigneeChange}>
+                <SelectTrigger className="h-9 bg-black/30 border-white/10">
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Unassigned —</SelectItem>
+                  {availableAssignees.length > 0 && (
+                    <>
+                      <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">Agents</div>
+                      {availableAssignees.filter((a) => a.kind === "agent").map((a) => (
+                        <SelectItem key={a.id} value={a.id}>{a.display_name}</SelectItem>
+                      ))}
+                      <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">Users</div>
+                      {availableAssignees.filter((a) => a.kind === "user").map((a) => (
+                        <SelectItem key={a.id} value={a.id}>{a.display_name}</SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Description */}
           <div>
-            <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">
-              Description
-            </label>
+            <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">Description</label>
             <Textarea
               value={task.description}
               onChange={(e) => onUpdate({ description: e.target.value })}
               rows={4}
               className="bg-black/30 border-white/10"
             />
-          </div>
-
-          {/* Assignees — now a dropdown of all available agents/users */}
-          <div>
-            <label className="mb-2 block text-[10px] uppercase tracking-wider text-muted-foreground">
-              Assignees
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {task.assignees.map((a) => (
-                <span
-                  key={a.id}
-                  className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/30 py-0.5 pl-0.5 pr-2 text-xs"
-                >
-                  <span
-                    className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-semibold text-white ${colorFor(
-                      a.display_name,
-                    )}`}
-                  >
-                    {initials(a.display_name)}
-                  </span>
-                  {a.display_name}
-                  <button
-                    onClick={() => removeAssignee(a.id)}
-                    className="ml-1 text-muted-foreground hover:text-red-400"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="mt-2 flex gap-2">
-              <Select
-                value={selectedAgentId}
-                onValueChange={(v) => {
-                  setSelectedAgentId(v);
-                  addAssigneeFromDropdown(v);
-                }}
-              >
-                <SelectTrigger className="h-8 bg-black/30 border-white/10 flex-1">
-                  <SelectValue placeholder="Add assignee…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {unassignedAgents.length === 0 ? (
-                    <SelectItem value="__none__" disabled>
-                      All agents/users assigned
-                    </SelectItem>
-                  ) : (
-                    unassignedAgents.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.display_name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
           {/* Subtasks */}
@@ -770,25 +629,12 @@ function TaskDetailDialog({
             </label>
             <div className="space-y-1.5">
               {task.subtasks.map((s) => (
-                <div
-                  key={s.id}
-                  className="group flex items-center gap-2 rounded-md border border-white/5 bg-black/20 px-2 py-1.5"
-                >
-                  <Checkbox
-                    checked={s.completed}
-                    onCheckedChange={() => toggleSub(s.id)}
-                  />
-                  <span
-                    className={`flex-1 text-sm ${
-                      s.completed ? "text-muted-foreground line-through" : "text-foreground"
-                    }`}
-                  >
+                <div key={s.id} className="group flex items-center gap-2 rounded-md border border-white/5 bg-black/20 px-2 py-1.5">
+                  <Checkbox checked={s.completed} onCheckedChange={() => toggleSub(s.id)} />
+                  <span className={`flex-1 text-sm ${s.completed ? "text-muted-foreground line-through" : "text-foreground"}`}>
                     {s.title}
                   </span>
-                  <button
-                    onClick={() => deleteSub(s.id)}
-                    className="opacity-0 transition-opacity group-hover:opacity-100"
-                  >
+                  <button onClick={() => deleteSub(s.id)} className="opacity-0 transition-opacity group-hover:opacity-100">
                     <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-400" />
                   </button>
                 </div>
@@ -802,9 +648,7 @@ function TaskDetailDialog({
                 placeholder="Add subtask…"
                 className="h-8 bg-black/30 border-white/10"
               />
-              <Button size="sm" variant="secondary" onClick={addSub}>
-                Add
-              </Button>
+              <Button size="sm" variant="secondary" onClick={addSub}>Add</Button>
             </div>
           </div>
         </div>
@@ -815,11 +659,7 @@ function TaskDetailDialog({
           </Button>
           <Button
             type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onClose();
-            }}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}
             className="bg-emerald-500 text-black hover:bg-emerald-400"
           >
             Done
@@ -834,46 +674,44 @@ function TaskDetailDialog({
 function NewTaskDialog({
   open,
   onOpenChange,
+  availableAssignees,
   onCreate,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  onCreate: (t: Omit<BoardTask, "id" | "position" | "created_at" | "subtasks" | "assignees">) => void;
+  availableAssignees: Assignee[];
+  onCreate: (t: {
+    title: string;
+    description: string;
+    priority: Priority;
+    board_column_id: ColumnId;
+    due_date: string | null;
+    assignee: Assignee | null;
+  }) => void;
 }) {
-  const [title, setTitle] = useState("");
+  const [title,       setTitle]       = useState("");
   const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<Priority>("medium");
-  const [column, setColumn] = useState<ColumnId>("todo");
-  const [dueDate, setDueDate] = useState("");
+  const [priority,    setPriority]    = useState<Priority>("medium");
+  const [column,      setColumn]      = useState<ColumnId>("todo");
+  const [dueDate,     setDueDate]     = useState("");
+  const [assigneeId,  setAssigneeId]  = useState<string>("__none__");
 
   const reset = () => {
-    setTitle("");
-    setDescription("");
-    setPriority("medium");
-    setColumn("todo");
-    setDueDate("");
+    setTitle(""); setDescription(""); setPriority("medium");
+    setColumn("todo"); setDueDate(""); setAssigneeId("__none__");
   };
 
   const submit = () => {
     if (!title.trim()) return;
-    onCreate({
-      title: title.trim(),
-      description: description.trim(),
-      priority,
-      board_column_id: column,
-      due_date: dueDate || null,
-    });
+    const assignee = assigneeId === "__none__"
+      ? null
+      : (availableAssignees.find((a) => a.id === assigneeId) ?? null);
+    onCreate({ title: title.trim(), description: description.trim(), priority, board_column_id: column, due_date: dueDate || null, assignee });
     reset();
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        onOpenChange(o);
-        if (!o) reset();
-      }}
-    >
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
       <DialogContent className="glass-card-elevated border-white/10 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>New task</DialogTitle>
@@ -894,43 +732,53 @@ function NewTaskDialog({
             rows={3}
             className="bg-black/30 border-white/10"
           />
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <Select value={priority} onValueChange={(v: Priority) => setPriority(v)}>
-              <SelectTrigger className="bg-black/30 border-white/10">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="bg-black/30 border-white/10"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {(["urgent", "high", "medium", "low"] as Priority[]).map((p) => (
-                  <SelectItem key={p} value={p} className="capitalize">
-                    {p}
-                  </SelectItem>
+                  <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Select value={column} onValueChange={(v: ColumnId) => setColumn(v)}>
-              <SelectTrigger className="bg-black/30 border-white/10">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="bg-black/30 border-white/10"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {COLUMNS.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
+                {COLUMNS.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
             <Input
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               className="bg-black/30 border-white/10"
             />
+            <Select value={assigneeId} onValueChange={setAssigneeId}>
+              <SelectTrigger className="bg-black/30 border-white/10">
+                <SelectValue placeholder="Assignee…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— Unassigned —</SelectItem>
+                {availableAssignees.filter((a) => a.kind === "agent").length > 0 && (
+                  <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">Agents</div>
+                )}
+                {availableAssignees.filter((a) => a.kind === "agent").map((a) => (
+                  <SelectItem key={a.id} value={a.id}>{a.display_name}</SelectItem>
+                ))}
+                {availableAssignees.filter((a) => a.kind === "user").length > 0 && (
+                  <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">Users</div>
+                )}
+                {availableAssignees.filter((a) => a.kind === "user").map((a) => (
+                  <SelectItem key={a.id} value={a.id}>{a.display_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button
             disabled={!title.trim()}
             onClick={submit}
