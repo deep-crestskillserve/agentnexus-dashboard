@@ -7,11 +7,17 @@ export type WorkflowStatus = "running" | "completed" | "failed" | "pending";
 export interface Agent {
   id: string;
   name: string;
-  type: string;
+  emoji: string;
   status: AgentStatus;
-  model: string | null;
+  capabilities: string[];
   created_at: string;
   updated_at: string;
+}
+
+export interface Subtask {
+  id: string;
+  title: string;
+  completed: boolean;
 }
 
 export interface Task {
@@ -24,6 +30,7 @@ export interface Task {
   priority: Priority;
   due_date: string | null;
   position: number;
+  subtasks: Subtask[];
   created_at: string;
   updated_at: string;
 }

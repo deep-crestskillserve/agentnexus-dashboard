@@ -186,9 +186,16 @@ export function LiveDashboard() {
                   key={agent.id}
                   className="flex items-center justify-between rounded-lg bg-muted/30 px-3 py-2"
                 >
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{agent.name}</p>
-                    <p className="text-xs text-muted-foreground">{agent.type}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base leading-none">{agent.emoji}</span>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{agent.name}</p>
+                      <p className="text-xs text-muted-foreground truncate max-w-48">
+                        {agent.capabilities.length > 0
+                          ? agent.capabilities.slice(0, 2).join(", ")
+                          : "No capabilities listed"}
+                      </p>
+                    </div>
                   </div>
                   <Badge
                     className={`border text-[10px] ${STATUS_COLOR[agent.status] ?? ""}`}

@@ -13,6 +13,13 @@
 --     a Canceled column; the old constraint silently rejected it)
 --   • due_date and position columns on tasks (the app reads/writes
 --     these but no prior migration created them)
+--   • agents now have emoji + capabilities (TEXT[]) instead of
+--     type + model — matches src/types/supabase.ts and the
+--     LiveAgents / LiveDashboard UI (see also 006_update_agents_schema.sql
+--     if you already ran an earlier copy of this file)
+--
+-- NOTE: also run "005 add task subtasks.sql" after this file — it adds
+-- the tasks.subtasks JSONB column, which isn't folded in here.
 -- ============================================================
 
 -- ============================================================
@@ -42,15 +49,26 @@ $$ LANGUAGE plpgsql;
 -- AGENTS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS agents (
-  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name        TEXT NOT NULL,
-  type        TEXT NOT NULL DEFAULT 'generic',
-  status      TEXT NOT NULL DEFAULT 'offline'
-                CHECK (status IN ('active','idle','error','offline')),
-  model       TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name         TEXT NOT NULL,
+  emoji        TEXT NOT NULL DEFAULT '🤖',
+  status       TEXT NOT NULL DEFAULT 'offline'
+                 CHECK (status IN ('active','idle','error','offline')),
+  capabilities TEXT[] NOT NULL DEFAULT '{}'::text[],
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- If this table pre-dates the emoji/capabilities redesign, it still has
+-- the old type/model columns — migrate it in place (see also the
+-- standalone "006_update_agents_schema.sql" for an already-applied DB)
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS emoji TEXT NOT NULL DEFAULT '🤖';
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS capabilities TEXT[] NOT NULL DEFAULT '{}'::text[];
+ALTER TABLE agents DROP COLUMN IF EXISTS type;
+ALTER TABLE agents DROP COLUMN IF EXISTS model;
+
+COMMENT ON COLUMN agents.emoji IS 'Single emoji rendered as the agent''s avatar in the dashboard UI.';
+COMMENT ON COLUMN agents.capabilities IS 'List of skill/capability tags rendered as badges in the dashboard UI.';
 
 DROP TRIGGER IF EXISTS agents_updated_at ON agents;
 CREATE TRIGGER agents_updated_at BEFORE UPDATE ON agents
@@ -383,9 +401,9 @@ CREATE TRIGGER sync_auth_user_to_public_update_trigger
 -- ============================================================
 -- SEED DATA (safe to keep — ON CONFLICT DO NOTHING)
 -- ============================================================
-INSERT INTO agents (name, type, status, model) VALUES
-  ('Agent Alpha',   'code',        'active',  'claude-sonnet-4-6'),
-  ('Dispatch Bot',  'coordinator', 'active',  'claude-haiku-4-5-20251001'),
-  ('Audit Bot',     'quality',     'idle',    'claude-opus-4-6'),
-  ('Search Agent',  'retrieval',   'offline', NULL)
+INSERT INTO agents (name, emoji, status, capabilities) VALUES
+  ('Agent Alpha',   '🤖', 'active',  ARRAY['TypeScript','React','PostgreSQL','Refactoring','Code Review']),
+  ('Dispatch Bot',  '📋', 'active',  ARRAY['Planning','Routing','Prioritization','Scheduling']),
+  ('Audit Bot',     '🛡️', 'idle',    ARRAY['Validation','Security','Logging','Policy']),
+  ('Search Agent',  '🔍', 'offline', ARRAY['Web Search','Retrieval','Summarization'])
 ON CONFLICT DO NOTHING;

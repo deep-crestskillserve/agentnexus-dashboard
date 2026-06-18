@@ -3,9 +3,15 @@ import { z } from "zod";
 export const AgentStatusSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1),
-  type: z.string().default("generic"),
+  emoji: z.string().min(1).max(8).optional(),
   status: z.enum(["active", "idle", "error", "offline"]),
-  model: z.string().optional().nullable(),
+  capabilities: z.array(z.string()).optional(),
+});
+
+export const SubtaskSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1),
+  completed: z.boolean(),
 });
 
 export const TaskSchema = z.object({
@@ -17,6 +23,7 @@ export const TaskSchema = z.object({
   priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
   due_date: z.string().optional().nullable(),
   position: z.number().int().optional(),
+  subtasks: z.array(SubtaskSchema).optional(),
 });
 
 export const LogSchema = z.object({
@@ -49,6 +56,7 @@ export const MetricSchema = z.object({
 });
 
 export type AgentStatusInput = z.infer<typeof AgentStatusSchema>;
+export type SubtaskInput = z.infer<typeof SubtaskSchema>;
 export type TaskInput = z.infer<typeof TaskSchema>;
 export type LogInput = z.infer<typeof LogSchema>;
 export type WorkflowInput = z.infer<typeof WorkflowSchema>;

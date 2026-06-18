@@ -33,7 +33,7 @@ function AgentDrawer({ agent, open, onClose }: { agent: Agent | null; open: bool
       <SheetContent className="w-full max-w-lg overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-emerald-400" />
+            <span className="text-xl leading-none">{agent.emoji}</span>
             {agent.name}
           </SheetTitle>
         </SheetHeader>
@@ -43,14 +43,6 @@ function AgentDrawer({ agent, open, onClose }: { agent: Agent | null; open: bool
             <div className="flex justify-between">
               <span className="text-muted-foreground">ID</span>
               <span className="text-foreground truncate max-w-48">{agent.id}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Type</span>
-              <span className="text-foreground">{agent.type}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Model</span>
-              <span className="text-foreground">{agent.model ?? "—"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Status</span>
@@ -65,6 +57,22 @@ function AgentDrawer({ agent, open, onClose }: { agent: Agent | null; open: bool
             <div className="flex justify-between">
               <span className="text-muted-foreground">Total Cost</span>
               <span className="text-foreground">${totalCost.toFixed(4)}</span>
+            </div>
+          </div>
+
+          {/* Capabilities */}
+          <div>
+            <h4 className="mb-2 text-sm font-semibold text-foreground">Capabilities</h4>
+            <div className="flex flex-wrap gap-1.5">
+              {agent.capabilities.length > 0 ? (
+                agent.capabilities.map((cap) => (
+                  <Badge key={cap} variant="outline" className="text-[10px]">
+                    {cap}
+                  </Badge>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground">No capabilities listed.</p>
+              )}
             </div>
           </div>
 
@@ -130,7 +138,7 @@ export function LiveAgents() {
   const filtered = agents.filter((a) => {
     const matchesSearch =
       a.name.toLowerCase().includes(search.toLowerCase()) ||
-      a.type.toLowerCase().includes(search.toLowerCase());
+      a.capabilities.some((c) => c.toLowerCase().includes(search.toLowerCase()));
     const matchesStatus = statusFilter === "all" || a.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -190,12 +198,16 @@ export function LiveAgents() {
               className="glass-card-elevated glow-hover p-4 text-left"
             >
               <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-semibold text-foreground">{agent.name}</p>
-                  <p className="text-xs text-muted-foreground">{agent.type}</p>
-                  {agent.model && (
-                    <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{agent.model}</p>
-                  )}
+                <div className="flex items-start gap-2">
+                  <span className="text-xl leading-none">{agent.emoji}</span>
+                  <div>
+                    <p className="font-semibold text-foreground">{agent.name}</p>
+                    {agent.capabilities.length > 0 && (
+                      <p className="mt-0.5 text-xs text-muted-foreground truncate max-w-48">
+                        {agent.capabilities.slice(0, 3).join(" · ")}
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <Badge className={`border text-[10px] ${STATUS_COLOR[agent.status]}`} variant="outline">
                   {agent.status}

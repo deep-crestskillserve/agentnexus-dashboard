@@ -35,15 +35,17 @@ cp .env.example .env
 # Edit .env and fill in your Supabase credentials
 ```
 
-### 3. Run database migration
+### 3. Run database migrations
 
-Open your Supabase project → **SQL Editor** → paste and run:
+Open your Supabase project → **SQL Editor** → paste and run, in order:
 
 ```
-migrations/001_openclaw_schema.sql
+migrations/000_base.sql
+migrations/005 add task subtasks.sql
+migrations/006_update_agents_schema.sql
 ```
 
-This creates all tables, RLS policies, indexes, and enables Realtime.
+`000_base.sql` is a consolidated, idempotent script that creates all tables, RLS policies, indexes, and enables Realtime — safe to run even if some of the older `001`–`004` migrations were already applied. `005` adds the tasks checklist column, and `006` moves the `agents` table to its current `emoji` / `capabilities` shape (also safe to run if you already have the older `type` / `model` columns).
 
 ### 4. Start dev server
 
@@ -91,9 +93,9 @@ curl -X POST https://your-dashboard.vercel.app/api/openclaw/agent-status \
   -H "Content-Type: application/json" \
   -d '{
     "name": "ResearchAgent-01",
-    "type": "research",
+    "emoji": "🔍",
     "status": "active",
-    "model": "claude-sonnet-4-6"
+    "capabilities": ["web_search", "summarization"]
   }'
 ```
 
@@ -236,5 +238,7 @@ src/
     └── index.tsx                # Main route (updated with live sections)
 
 migrations/
-└── 001_openclaw_schema.sql      # Full schema + RLS + Realtime
+├── 000_base.sql                  # Consolidated schema + RLS + Realtime
+├── 005 add task subtasks.sql     # Adds tasks.subtasks JSONB column
+└── 006_update_agents_schema.sql  # agents: type/model → emoji/capabilities
 ```

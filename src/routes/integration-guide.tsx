@@ -23,9 +23,9 @@ const registerAgentCode = `curl -X POST https://your-domain.com/api/openclaw/age
   -H "apikey: YOUR_SERVICE_ROLE_KEY" \\
   -d '{
     "name": "YourAgent-01",
-    "type": "assistant",
+    "emoji": "🤖",
     "status": "active",
-    "model": "claude-sonnet-4-5"
+    "capabilities": ["code_review", "refactoring"]
   }'`;
 
 const updateAgentStatusCode = `curl -X POST https://your-domain.com/api/openclaw/agent-status \\
@@ -40,7 +40,8 @@ const createTaskCode = `curl -X POST https://your-domain.com/api/openclaw/task \
   -H "Content-Type: application/json" \\
   -H "apikey: YOUR_SERVICE_ROLE_KEY" \\
   -d '{
-    "agent_id": "YOUR_AGENT_UUID",
+    "assignee_id": "YOUR_AGENT_UUID",
+    "assignee_type": "agent",
     "title": "Analyze Q3 earnings report",
     "description": "Extract key financial metrics and write summary",
     "status": "todo",
@@ -51,7 +52,8 @@ const updateTaskCode = `curl -X POST https://your-domain.com/api/openclaw/task \
   -H "Content-Type: application/json" \\
   -H "apikey: YOUR_SERVICE_ROLE_KEY" \\
   -d '{
-    "agent_id": "YOUR_AGENT_UUID",
+    "assignee_id": "YOUR_AGENT_UUID",
+    "assignee_type": "agent",
     "title": "Analyze Q3 earnings report",
     "status": "doing"
   }'`;

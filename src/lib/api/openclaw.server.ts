@@ -19,7 +19,7 @@ export const upsertAgentStatus = createServerFn({ method: "POST" })
       // Update existing
       const { data: row, error } = await db
         .from("agents")
-        .update({ name: data.name, type: data.type, status: data.status, model: data.model })
+        .update({ name: data.name, emoji: data.emoji, status: data.status, capabilities: data.capabilities })
         .eq("id", data.id)
         .select()
         .single();
@@ -28,7 +28,7 @@ export const upsertAgentStatus = createServerFn({ method: "POST" })
     } else {
       const { data: row, error } = await db
         .from("agents")
-        .insert({ name: data.name, type: data.type, status: data.status, model: data.model })
+        .insert({ name: data.name, emoji: data.emoji, status: data.status, capabilities: data.capabilities })
         .select()
         .single();
       if (error) throw new Error(error.message);
