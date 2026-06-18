@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import type { Task } from "@/types/supabase";
 
@@ -6,8 +6,15 @@ export function useTasks(agentId?: string) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountId = useRef(0);
 
   useEffect(() => {
+    // Unique channel name per effect invocation prevents the
+    // "cannot add postgres_changes callbacks after subscribe()" error
+    // that occurs in React 18 Strict Mode (double-invocation of effects).
+    mountId.current += 1;
+    const channelName = `tasks-changes-${agentId ?? "all"}-${mountId.current}`;
+
     let query = supabase
       .from("tasks")
       .select("*")
@@ -22,7 +29,7 @@ export function useTasks(agentId?: string) {
     });
 
     const channel = supabase
-      .channel(`tasks-changes${agentId ? `-${agentId}` : ""}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
