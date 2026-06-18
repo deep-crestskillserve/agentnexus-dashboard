@@ -23,7 +23,6 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import {
   initialAgents,
   initialCouncils,
-  initialLogs,
   initialMeetings,
   initialTasks,
   type TaskStatus,
@@ -71,7 +70,6 @@ function Dashboard() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [agents] = useState(initialAgents);
   const [tasks, setTasks] = useState(initialTasks);
-  const [logs] = useState(initialLogs);
   const [councils] = useState(initialCouncils);
   const [meetings] = useState(initialMeetings);
 
@@ -106,7 +104,7 @@ function Dashboard() {
                   {section === "deck" && <CommandDeck />}
                   {section === "agents" && <AgentProfiles />}
                   {section === "tasks" && <TaskBoard />}
-                  {section === "log" && <AILog logs={logs} agents={agents} />}
+                  {section === "log" && <AILog />}
                   {section === "council" && <Council sessions={councils} agents={agents} />}
                   {section === "meetings" && <MeetingIntelligence meetings={meetings} />}
                   {section === "integrations" && <Integrations />}
