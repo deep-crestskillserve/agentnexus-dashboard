@@ -21,7 +21,6 @@ import { Topbar } from "@/components/clawbuddy/Topbar";
 import { CommandPalette } from "@/components/clawbuddy/CommandPalette";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import {
-  initialActivity,
   initialAgents,
   initialCouncils,
   initialLogs,
@@ -73,7 +72,6 @@ function Dashboard() {
   const [agents] = useState(initialAgents);
   const [tasks, setTasks] = useState(initialTasks);
   const [logs] = useState(initialLogs);
-  const [activity] = useState(initialActivity);
   const [councils] = useState(initialCouncils);
   const [meetings] = useState(initialMeetings);
 
@@ -105,10 +103,8 @@ function Dashboard() {
                   transition={{ duration: 0.25 }}
                 >
                   <SectionTitle section={section} />
-                  {section === "deck" && (
-                    <CommandDeck agents={agents} tasks={tasks} activity={activity} />
-                  )}
-                  {section === "agents" && <AgentProfiles agents={agents} />}
+                  {section === "deck" && <CommandDeck />}
+                  {section === "agents" && <AgentProfiles />}
                   {section === "tasks" && <TaskBoard />}
                   {section === "log" && <AILog logs={logs} agents={agents} />}
                   {section === "council" && <Council sessions={councils} agents={agents} />}
