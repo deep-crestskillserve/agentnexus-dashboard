@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import type { Task } from "@/types/supabase";
 
@@ -6,14 +6,17 @@ export function useTasks(agentId?: string) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const mountId = useRef(0);
 
   useEffect(() => {
-    // Unique channel name per effect invocation prevents the
-    // "cannot add postgres_changes callbacks after subscribe()" error
-    // that occurs in React 18 Strict Mode (double-invocation of effects).
-    mountId.current += 1;
-    const channelName = `tasks-changes-${agentId ?? "all"}-${mountId.current}`;
+    // Use a random suffix so each effect invocation gets a brand-new channel.
+    // This prevents the Supabase "cannot add postgres_changes callbacks after
+    // subscribe()" error caused by React 18 Strict Mode double-invoking effects:
+    // the cleanup removes the old channel, but Supabase's internal registry may
+    // still hold a reference to it by name until GC. A random name guarantees
+    // we never call .on() on an already-subscribed channel object.
+    const channelName = `tasks-${agentId ?? "all"}-${crypto.randomUUID()}`;
+
+    let cancelled = false;
 
     let query = supabase
       .from("tasks")
@@ -23,6 +26,7 @@ export function useTasks(agentId?: string) {
     if (agentId) query = query.eq("assignee_id", agentId);
 
     query.then(({ data, error }) => {
+      if (cancelled) return;
       if (error) setError(error.message);
       else setTasks(data ?? []);
       setLoading(false);
@@ -57,6 +61,7 @@ export function useTasks(agentId?: string) {
       .subscribe();
 
     return () => {
+      cancelled = true;
       supabase.removeChannel(channel);
     };
   }, [agentId]);
