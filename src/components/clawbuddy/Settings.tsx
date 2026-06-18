@@ -1,11 +1,28 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/lib/auth";
+import { useUsers } from "@/hooks/useUsers";
 
 export function Settings() {
-  const [name, setName] = useState("Jamie Lin");
-  const [email] = useState("jamie@acme.com");
+  const { user } = useAuth();
+  const { users } = useUsers();
+  const profile = users.find((u) => u.id === user?.id);
+
+  const fallbackName =
+    (user?.user_metadata?.full_name as string | undefined) ||
+    (user?.user_metadata?.name as string | undefined) ||
+    user?.email ||
+    "";
+
+  const [name, setName] = useState(profile?.display_name || profile?.name || fallbackName);
+  const email = profile?.email || user?.email || "";
   const [notif, setNotif] = useState({ council: true, agent: true, weekly: false });
+
+  // Keep the field in sync once the signed-in user / synced profile row resolves
+  useEffect(() => {
+    setName(profile?.display_name || profile?.name || fallbackName);
+  }, [profile, fallbackName]);
 
   return (
     <div className="glass-card-elevated p-6">
