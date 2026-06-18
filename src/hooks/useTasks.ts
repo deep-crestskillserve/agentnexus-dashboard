@@ -14,7 +14,7 @@ export function useTasks(agentId?: string) {
     // the cleanup removes the old channel, but Supabase's internal registry may
     // still hold a reference to it by name until GC. A random name guarantees
     // we never call .on() on an already-subscribed channel object.
-    const channelName = `tasks-${agentId ?? "all"}-${crypto.randomUUID()}`;
+    const channelName = `tasks-${agentId ?? "all"}-${Math.random().toString(36).slice(2)}`;
 
     let cancelled = false;
 
